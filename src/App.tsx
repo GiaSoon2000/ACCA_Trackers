@@ -124,6 +124,17 @@ export default function App() {
     setChapters((prev) => prev.filter((c) => c.id !== chapterId));
   }, []);
 
+  const handleRemoveSubchapter = useCallback((chapterId: string, subId: string, subTitle: string) => {
+    const confirmed = window.confirm(`Remove "${subTitle}" from the checklist?`);
+    if (!confirmed) return;
+    setChapters((prev) =>
+      prev.map((ch) => {
+        if (ch.id !== chapterId) return ch;
+        return { ...ch, subchapters: ch.subchapters.filter((s) => s.id !== subId) };
+      })
+    );
+  }, []);
+
   const handleParsed = useCallback((newChapters: Chapter[]) => {
     setChapters(newChapters);
     // Auto-expand first two chapters for immediate visibility
@@ -373,31 +384,49 @@ export default function App() {
                         {chapter.subchapters.map((sub) => (
                           <div
                             key={sub.id}
-                            className="flex items-start gap-2 cursor-pointer group"
-                            onClick={() => handleToggleSubchapter(chapter.id, sub.id)}
+                            className="flex items-start gap-1.5 group"
                           >
+                            {/* Checkbox + label — clickable area */}
+                            <div
+                              className="flex items-start gap-2 cursor-pointer flex-1 min-w-0"
+                              onClick={() => handleToggleSubchapter(chapter.id, sub.id)}
+                            >
+                              <button
+                                type="button"
+                                id={`sub-check-${sub.id}`}
+                                aria-checked={sub.isCompleted}
+                                role="checkbox"
+                                className={`w-4 h-4 mt-0.5 rounded-sm border-2 flex items-center justify-center shrink-0 transition-all ${
+                                  sub.isCompleted
+                                    ? "bg-[#4ECDC4] border-[#4ECDC4] text-white"
+                                    : "border-slate-300 group-hover:border-[#4ECDC4] bg-white"
+                                }`}
+                              >
+                                {sub.isCompleted && <Check className="w-3 h-3 stroke-[3px]" />}
+                              </button>
+                              <span
+                                className={`text-[11px] leading-relaxed select-none transition-all ${
+                                  sub.isCompleted
+                                    ? "text-slate-400 line-through"
+                                    : "text-slate-800 font-semibold"
+                                }`}
+                              >
+                                {sub.title}
+                              </span>
+                            </div>
+
+                            {/* Delete subchapter button — visible on hover */}
                             <button
                               type="button"
-                              id={`sub-check-${sub.id}`}
-                              aria-checked={sub.isCompleted}
-                              role="checkbox"
-                              className={`w-4 h-4 mt-0.5 rounded-sm border-2 flex items-center justify-center shrink-0 transition-all ${
-                                sub.isCompleted
-                                  ? "bg-[#4ECDC4] border-[#4ECDC4] text-white"
-                                  : "border-slate-300 group-hover:border-[#4ECDC4] bg-white"
-                              }`}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleRemoveSubchapter(chapter.id, sub.id, sub.title);
+                              }}
+                              className="opacity-0 group-hover:opacity-100 shrink-0 mt-0.5 w-4 h-4 flex items-center justify-center rounded text-slate-300 hover:text-rose-400 hover:bg-rose-50 transition-all"
+                              title="Remove this topic"
                             >
-                              {sub.isCompleted && <Check className="w-3 h-3 stroke-[3px]" />}
+                              <X className="w-3 h-3" />
                             </button>
-                            <span
-                              className={`text-[11px] leading-relaxed select-none transition-all ${
-                                sub.isCompleted
-                                  ? "text-slate-400 line-through"
-                                  : "text-slate-800 font-semibold"
-                              }`}
-                            >
-                              {sub.title}
-                            </span>
                           </div>
                         ))}
 
