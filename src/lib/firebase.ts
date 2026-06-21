@@ -1,15 +1,8 @@
 import { initializeApp, getApps } from "firebase/app";
-import { 
-  getFirestore, 
-  doc, 
-  setDoc, 
-  getDoc, 
-  collection, 
-  onSnapshot 
-} from "firebase/firestore";
+import { getFirestore, doc, setDoc, getDoc } from "firebase/firestore";
 
-// Safe, fallback configuration placeholder
-// If user has set up real environment variables, they will propagate immediately
+// Firebase config — personal app, secured via Firestore rules.
+// Env vars take precedence; hardcoded values are the production fallback.
 const metaEnv = (import.meta as any).env || {};
 
 const firebaseConfig = {
@@ -18,101 +11,53 @@ const firebaseConfig = {
   projectId: metaEnv.VITE_FIREBASE_PROJECT_ID || "middleware-staging-499008",
   storageBucket: metaEnv.VITE_FIREBASE_STORAGE_BUCKET || "middleware-staging-499008.firebasestorage.app",
   messagingSenderId: metaEnv.VITE_FIREBASE_MESSAGING_SENDER_ID || "972058724268",
-  appId: metaEnv.VITE_FIREBASE_APP_ID || "1:972058724268:web:84fa65ba5b122085425c09"
+  appId: metaEnv.VITE_FIREBASE_APP_ID || "1:972058724268:web:84fa65ba5b122085425c09",
 };
 
-// Lazy initialization wrapper to prevent crash on incorrect startup environments
-let db: any = null;
-let isRealConfig = true;
+let db: ReturnType<typeof getFirestore> | null = null;
 
 try {
   const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
   const dbId = metaEnv.VITE_FIREBASE_DATABASE_ID || "ai-studio-9321e51b-c822-4920-8883-37f9813df320";
   db = getFirestore(app, dbId);
 } catch (error) {
-  console.warn("Firebase was not initialized with a live production cluster. Falling back to robust offline state engine.", error);
+  console.warn("Firebase initialization failed. App will run in offline mode.", error);
 }
 
-export { db, isRealConfig, firebaseConfig };
+export { db };
 
-// Helper to save state cleanly
-export enum OperationType {
-  CREATE = 'create',
-  UPDATE = 'update',
-  DELETE = 'delete',
-  LIST = 'list',
-  GET = 'get',
-  WRITE = 'write',
+export interface CloudPayload {
+  chapters: any[];
+  settings: any;
 }
 
-export interface FirestoreErrorInfo {
-  error: string;
-  operationType: OperationType;
-  path: string | null;
-  authInfo: {
-    userId?: string | null;
-    email?: string | null;
-    emailVerified?: boolean | null;
-    isAnonymous?: boolean | null;
-    tenantId?: string | null;
-    providerInfo?: {
-      providerId?: string | null;
-      email?: string | null;
-    }[];
-  }
-}
-
-export function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
-  const errInfo: FirestoreErrorInfo = {
-    error: error instanceof Error ? error.message : String(error),
-    authInfo: {
-      userId: null,
-      email: null,
-      emailVerified: null,
-      isAnonymous: null,
-      tenantId: null,
-      providerInfo: []
-    },
-    operationType,
-    path
-  };
-  const jsonString = JSON.stringify(errInfo);
-  console.error("Firestore Error: ", jsonString);
-  throw new Error(jsonString);
-}
-
-export async function saveTrackerStateToCloud(userId: string, data: { chapters: any[]; settings: any; todayStr: string }) {
+/** Save tracker state to Firestore. Returns true on success. */
+export async function saveTrackerStateToCloud(
+  userId: string,
+  data: CloudPayload
+): Promise<boolean> {
   if (!db) return false;
-  const pathStr = `acca_trackers/${userId}`;
   try {
-    const userDocRef = doc(db, "acca_trackers", userId);
-    await setDoc(userDocRef, {
-      ...data,
-      updatedAt: new Date().toISOString()
-    }, { merge: true });
+    const ref = doc(db, "acca_trackers", userId);
+    await setDoc(ref, { ...data, updatedAt: new Date().toISOString() }, { merge: true });
     return true;
-  } catch (error: any) {
-    console.error("Error storing student progress to Firebase Cloud:", error);
-    // Throw standard schema conformant error for diagnosis
-    handleFirestoreError(error, OperationType.WRITE, pathStr);
+  } catch (error) {
+    console.error("Firestore save failed:", error);
     return false;
   }
 }
 
-// Helper to fetch progress state
-export async function fetchTrackerStateFromCloud(userId: string) {
+/** Fetch tracker state from Firestore. Returns null if not found or on error. */
+export async function fetchTrackerStateFromCloud(userId: string): Promise<CloudPayload | null> {
   if (!db) return null;
-  const pathStr = `acca_trackers/${userId}`;
   try {
-    const userDocRef = doc(db, "acca_trackers", userId);
-    const snap = await getDoc(userDocRef);
+    const ref = doc(db, "acca_trackers", userId);
+    const snap = await getDoc(ref);
     if (snap.exists()) {
-      return snap.data();
+      return snap.data() as CloudPayload;
     }
-  } catch (error: any) {
-    console.error("Error downloading student progress from Firebase Cloud:", error);
-    // Throw standard schema conformant error for diagnosis
-    handleFirestoreError(error, OperationType.GET, pathStr);
+  } catch (error) {
+    console.error("Firestore fetch failed:", error);
   }
   return null;
 }
