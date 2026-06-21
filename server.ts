@@ -7,26 +7,25 @@ import fs from "fs";
 
 dotenv.config();
 
-async function startServer() {
-  const app = express();
-  const PORT = 3000;
+const app = express();
+const PORT = 3000;
 
-  // Enlarge client body size limit to support photo/image base64 payloads
-  app.use(express.json({ limit: "30mb" }));
+// Enlarge client body size limit to support photo/image base64 payloads
+app.use(express.json({ limit: "30mb" }));
 
-  // Initialize server-side Gemini client securely
-  const apiKey = process.env.GEMINI_API_KEY;
-  const ai = new GoogleGenAI({
-    apiKey: apiKey || "MOCK_API_KEY",
-    httpOptions: {
-      headers: {
-        'User-Agent': 'aistudio-build',
-      }
+// Initialize server-side Gemini client securely
+const apiKey = process.env.GEMINI_API_KEY;
+const ai = new GoogleGenAI({
+  apiKey: apiKey || "MOCK_API_KEY",
+  httpOptions: {
+    headers: {
+      'User-Agent': 'aistudio-build',
     }
-  });
+  }
+});
 
-  // API endpoint: Parse Syllabus Image with vision AI
-  app.post("/api/parse-syllabus", async (req, res) => {
+// API endpoint: Parse Syllabus Image with vision AI
+app.post("/api/parse-syllabus", async (req, res) => {
     try {
       const { image, mimeType } = req.body;
       if (!image || !mimeType) {
@@ -141,25 +140,31 @@ Instructions:
   });
 
   // Serve static assets or route through Vite development proxy
-  const distPath = path.join(process.cwd(), "dist");
-  const hasBuildAssets = fs.existsSync(path.join(distPath, "index.html"));
+  async function startServer() {
+    const distPath = path.join(process.cwd(), "dist");
+    const hasBuildAssets = fs.existsSync(path.join(distPath, "index.html"));
 
-  if (process.env.NODE_ENV === "production" || hasBuildAssets) {
-    app.use(express.static(distPath));
-    app.get("*", (req, res) => {
-      res.sendFile(path.join(distPath, "index.html"));
+    if (process.env.NODE_ENV === "production" || hasBuildAssets) {
+      app.use(express.static(distPath));
+      app.get("*", (req, res) => {
+        res.sendFile(path.join(distPath, "index.html"));
+      });
+    } else {
+      const vite = await createViteServer({
+        server: { middlewareMode: true },
+        appType: "spa",
+      });
+      app.use(vite.middlewares);
+    }
+
+    app.listen(PORT, "0.0.0.0", () => {
+      console.log(`Server standing on port ${PORT}`);
     });
-  } else {
-    const vite = await createViteServer({
-      server: { middlewareMode: true },
-      appType: "spa",
-    });
-    app.use(vite.middlewares);
   }
 
-  app.listen(PORT, "0.0.0.0", () => {
-    console.log(`Server standing on port ${PORT}`);
-  });
-}
+  // Only start the local listener and dev server state if we aren't in Vercel Serverless environment
+  if (!process.env.VERCEL) {
+    startServer();
+  }
 
-startServer();
+  export default app;
