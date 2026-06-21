@@ -1,0 +1,6 @@
+{
+  "name": "ACCA Prep Tracker",
+  "description": "Verify and monitor your ACCA exam preparation progress, parse syllabus images with vision AI, and track daily subchapter targets dynamically.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

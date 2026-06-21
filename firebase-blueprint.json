@@ -1,0 +1,35 @@
+{
+  "entities": {
+    "TrackerState": {
+      "title": "TrackerState",
+      "description": "Student ACCA study progress tracker state",
+      "type": "object",
+      "properties": {
+        "chapters": {
+          "type": "array",
+          "description": "ACCA study chapters and subchapters"
+        },
+        "settings": {
+          "type": "object",
+          "description": "User tracking settings"
+        },
+        "todayStr": {
+          "type": "string",
+          "description": "Today's tracking date"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Last updated timestamp"
+        }
+      },
+      "required": ["chapters", "settings", "todayStr"]
+    }
+  },
+  "firestore": {
+    "/acca_trackers/{userId}": {
+      "schema": "TrackerState",
+      "description": "Individual student's saved syllabus checklist, settings, and study progress."
+    }
+  }
+}
