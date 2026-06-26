@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import { DEFAULT_SETTINGS } from "./data/sampleSyllabus";
 import { Chapter, TrackerSettings } from "./types";
 import { MathWidget } from "./components/MathWidget";
@@ -39,6 +39,10 @@ export default function App() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [syncStatus, setSyncStatus] = useState<SyncStatus>("idle");
 
+  // Guard: don't save to cloud until the initial load has fully completed.
+  // Using a ref (not state) so it never triggers a re-render.
+  const isCloudLoaded = useRef(false);
+
   // Per-chapter inline subchapter input
   const [subInput, setSubInput] = useState<Record<string, string>>({});
 
@@ -47,6 +51,8 @@ export default function App() {
     async function loadFromCloud() {
       if (!db) {
         setSyncStatus("offline");
+        // Even in offline mode, mark as loaded so saves aren't permanently blocked
+        isCloudLoaded.current = true;
         return;
       }
       setSyncStatus("loading");
@@ -59,13 +65,18 @@ export default function App() {
         // First session — no cloud data yet
         setSyncStatus("idle");
       }
+      // Unlock saves AFTER load is complete (success or empty)
+      isCloudLoaded.current = true;
     }
     loadFromCloud();
   }, []);
 
   // ─── Firebase: Debounced save on state changes ────────────────────────────────
   useEffect(() => {
-    if (syncStatus === "loading") return; // Don't save during initial load
+    // Don't save until the initial cloud load has fully completed.
+    // This prevents the race condition where an empty chapters[] is saved
+    // before Firestore data has been fetched and applied.
+    if (!isCloudLoaded.current) return;
 
     const timer = setTimeout(async () => {
       if (!db) return;
@@ -115,6 +126,21 @@ export default function App() {
     );
     setSubInput((prev) => ({ ...prev, [chapterId]: "" }));
   }, [subInput]);
+
+  // Marks all subchapters in a chapter as complete. If all are already done,
+  // it unchecks them all instead (a clean toggle so she can redo a chapter).
+  const handleToggleChapterComplete = useCallback((chapterId: string) => {
+    setChapters((prev) =>
+      prev.map((ch) => {
+        if (ch.id !== chapterId) return ch;
+        const allDone = ch.subchapters.length > 0 && ch.subchapters.every((s) => s.isCompleted);
+        return {
+          ...ch,
+          subchapters: ch.subchapters.map((s) => ({ ...s, isCompleted: !allDone })),
+        };
+      })
+    );
+  }, []);
 
   const handleRemoveChapter = useCallback((chapterId: string, chapterTitle: string) => {
     const confirmed = window.confirm(
@@ -367,6 +393,25 @@ export default function App() {
                       </div>
 
                       <div className="flex items-center gap-2 shrink-0">
+                        {/* Check-all / Uncheck-all toggle */}
+                        {chTotal > 0 && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleToggleChapterComplete(chapter.id);
+                            }}
+                            title={allDone ? "Uncheck all subchapters" : "Mark all as done"}
+                            className={`flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full border transition-all ${
+                              allDone
+                                ? "bg-slate-100 border-slate-200 text-slate-400 hover:bg-rose-50 hover:border-rose-200 hover:text-rose-400"
+                                : "bg-[#4ECDC4]/10 border-[#4ECDC4]/30 text-[#4ECDC4] hover:bg-[#4ECDC4] hover:text-white"
+                            }`}
+                          >
+                            <Check className="w-2.5 h-2.5" />
+                            {allDone ? "Undo" : "All"}
+                          </button>
+                        )}
                         <span className="text-[10px] font-mono font-bold text-slate-400">
                           {chDone}/{chTotal}
                         </span>
